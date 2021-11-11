@@ -56,7 +56,7 @@ class Agent(object):
         self.__target.load_state_dict(self.__policy.state_dict())
         self.__optimizer = optim.Adam(
             self.__policy.parameters(),
-            lr=0.0000625,
+            lr=0.000015625,
             eps=1.5e-4,
         )
         self.__target.eval()
@@ -76,7 +76,7 @@ class Agent(object):
     def learn(self, memory: Prioritized_ReplayMemory, batch_size: int) -> float:
         """learn trains the value network via TD-learning."""
         self.__belta += self.__beta_increment_per_sampling
-        self.__belta = min(self.__belta, 1.)
+        self.__belta = min(self.__belta, 1.0)
         state_batch, action_batch, reward_batch, next_batch, done_batch, indice_batch, weight_batch = \
             memory.sample(batch_size, self.__belta)
 
@@ -85,7 +85,7 @@ class Agent(object):
         expected = (self.__gamma * values_next.unsqueeze(1)) * (1. - done_batch) + reward_batch
 
         loss = F.smooth_l1_loss(values, expected, reduction = 'none')
-        priorites = loss + 1e-5
+        priorites = loss + 0.01
 
         memory.update_priorities(indice_batch, priorites)
         loss = (weight_batch * loss).mean()
