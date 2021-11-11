@@ -11,7 +11,7 @@ from collections import deque
 from utils_env import MyEnv
 from utils_drl import Agent
 
-model = f"./models/model_perv1"
+model = f"./model_perv1"
 
 device = torch.device("cpu")
 env = MyEnv(device)
