@@ -43,7 +43,7 @@ class Prioritized_ReplayMemory(object):
         self.__m_rewards = sink(torch.zeros((capacity, 1), dtype=torch.int8))
         self.__m_dones = sink(torch.zeros((capacity, 1), dtype=torch.bool))
 
-        self.__m_priorities = sink(torch.zeros((capacity, 1), dtype=torch.float64))
+        self.__m_priorities = torch.zeros((capacity, 1), dtype=torch.float64)
 
     def push(
             self,
