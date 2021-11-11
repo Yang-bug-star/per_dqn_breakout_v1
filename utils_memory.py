@@ -26,7 +26,8 @@ class Prioritized_ReplayMemory(object):
             channels: int,
             capacity: int,
             alpha   : float,
-            device: TorchDevice
+            device: TorchDevice,
+            full_sink: bool = True,
     ) -> None:
         self.__capacity = capacity
         self.__alpha = alpha
@@ -35,12 +36,14 @@ class Prioritized_ReplayMemory(object):
         self.__size = 0
         self.__pos = 0
 
-        self.__m_states = torch.zeros(
-            (capacity, channels, 84, 84), dtype=torch.uint8)
-        self.__m_actions = torch.zeros((capacity, 1), dtype=torch.long)
-        self.__m_rewards = torch.zeros((capacity, 1), dtype=torch.int8)
-        self.__m_dones = torch.zeros((capacity, 1), dtype=torch.bool)
-        self.__m_priorities = torch.zeros((capacity, 1), dtype=torch.float64)
+        sink = lambda x: x.to(device) if full_sink else x
+        self.__m_states = sink(torch.zeros(
+            (capacity, channels, 84, 84), dtype=torch.uint8))
+        self.__m_actions = sink(torch.zeros((capacity, 1), dtype=torch.long))
+        self.__m_rewards = sink(torch.zeros((capacity, 1), dtype=torch.int8))
+        self.__m_dones = sink(torch.zeros((capacity, 1), dtype=torch.bool))
+
+        self.__m_priorities = sink(torch.zeros((capacity, 1), dtype=torch.float64))
 
     def push(
             self,
@@ -56,7 +59,8 @@ class Prioritized_ReplayMemory(object):
         max_priority = self.__m_priorities.max() if  self.__size else 1.0
         self.__m_priorities[self.__pos, 0] = max_priority
         self.__pos = (self.__pos + 1) % self.__capacity
-        self.__size = max(self.__size, self.__pos)
+        self.__size += 1
+        self.__size = min(self.__size, self.__capacity)
 
 
     def sample(self, batch_size: int, beta: float) -> Tuple[
@@ -68,21 +72,20 @@ class Prioritized_ReplayMemory(object):
             BatchIndice,
             Batchweight
     ]:
-        if self.__size == self.capacity:
-            priorities = self.__m_priorities
-        else:
-            priorities = self.__m_priorities[:self.__pos]
+        
+        priorities = self.__m_priorities[:self.__size]
 
         probabilities = priorities[:,0] ** self.__alpha
         probabilities /= probabilities.sum()
-
+        probabilities = probabilities.cpu().detach().numpy()
+        min_prob = np.min(probabilities)
+     
         indices = np.random.choice(self.__size, batch_size, p=probabilities)
-
-        weights  = (self.__size * probabilities[indices]) ** (-beta)
-        weights /= weights.max()
-
-        indices =  torch.from_numpy(indices)
-        weights =  torch.tensor(weights, dtype=torch.float64)
+       
+        weights  = np.power(probabilities / min_prob, -beta)
+        
+        indices =  torch.from_numpy(indices).type(torch.long)
+        weights =  torch.from_numpy(weights).to(self.__device).float()
 
         b_state = self.__m_states[indices, :4].to(self.__device).float()
         b_next = self.__m_states[indices, 1:].to(self.__device).float()
